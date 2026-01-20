@@ -7,8 +7,10 @@ from fastapi.responses import StreamingResponse
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 
+# Load Environment Variables
 load_dotenv()
 
+# Ambil variable
 try:
     API_ID = int(os.getenv("API_ID"))
     API_HASH = os.getenv("API_HASH")
@@ -18,6 +20,7 @@ except (TypeError, ValueError):
     print("CRITICAL ERROR: Variable Environment salah!")
     raise
 
+# Gunakan MemorySession agar tidak ada error Database Locked
 client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 @asynccontextmanager
@@ -34,10 +37,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# --- BAGIAN YANG DIPERBAIKI (Ganti download_file jadi iter_download) ---
+# --- BAGIAN OPTIMASI STREAMING ---
 async def stream_file_generator(message, offset, limit):
-    async for chunk in client.iter_download(message.media, offset=offset, limit=limit):
+    # Kita set chunk_size jadi 1MB (1024 * 1024)
+    # Agar server tidak terlalu sering request (mengurangi latency)
+    chunk_size = 1024 * 1024 
+    
+    async for chunk in client.iter_download(
+        message.media, 
+        offset=offset, 
+        limit=limit,
+        chunk_size=chunk_size, # <--- TAMBAHKAN INI
+        request_size=chunk_size # <--- DAN INI
+    ):
         yield chunk
-
+        
 @app.get("/")
 async def root():
     return {"status": "Server Ready", "type": "Memory Session Mode"}
@@ -45,7 +60,7 @@ async def root():
 @app.get("/stream/{msg_id}")
 async def stream_video(msg_id: int, request: Request):
     try:
-
+        # Ambil pesan
         message = await client.get_messages(CHANNEL_ID, ids=msg_id)
         
         if not message or not message.file:
