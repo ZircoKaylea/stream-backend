@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 async def stream_file_generator(message, offset, limit):
-    async for chunk in client.download_file(message.media, offset=offset, limit=limit):
+    async for chunk in client.iter_download(message.media, offset=offset, limit=limit):
         yield chunk
 
 @app.get("/")
@@ -45,6 +45,7 @@ async def root():
 @app.get("/stream/{msg_id}")
 async def stream_video(msg_id: int, request: Request):
     try:
+
         message = await client.get_messages(CHANNEL_ID, ids=msg_id)
         
         if not message or not message.file:
